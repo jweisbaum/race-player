@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+  integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+  crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+  integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+  crossorigin=""></script>
+  <script src='https://unpkg.com/@turf/turf@6.3.0/turf.min.js'></script>
+  <script src="https://unpkg.com/leaflet.boatmarker/leaflet.boatmarker.min.js"></script>
+
+  <style>
+      body {
+          margin: 0px;
+        }
+        
+        #mapid {
+          width: 100%;
+          height: 100%;
+          position: absolute;
+          background: #f8f4f0;
+          padding: 0;
+          z-index: 0;
+        }
+  </style>
+  
+</head>
+<body>
+<div id="mapid"></div>
+<script>
+  // Get the race id that you want to subscribe to from the url parameters.
+  const deliminator = 'raceid='
+  const queryString = window.location.search;
+  const raceId = queryString.split(deliminator)[1].split('/')[0]
+  const deviceIdsToLayers = {}
+  const deviceIdsToBoatMarkers = {}
+
+  console.log(raceId)
+
+  // Subscribe to that race via a websocket. Don't forget a heartbeat to keep that socket alive!
+  function heartbeat() {
+      if (!ws) return;
+      if (ws.readyState !== 1) return;
+      // This is a bad design on our part. You need to send the string literal 'heartbeat' to keep the socket connected. Our bad.
+      ws.send(JSON.stringify({type:'heartbeat'}));
+      setTimeout(heartbeat, 500);
+  }
+  heartbeat()
+
+  function toGeoJson(lat,lon){
+    var obj = {
+      'type': 'FeatureCollection',
+        'crs': {
+          'type': 'name',
+          'properties': {
+            'name': 'EPSG:3857',
+          },
+        },
+        'features': [
+          {
+            'type': 'Feature',
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [lon, lat],
+            }
+          }]
+      }
+      return obj
+  }
+
+  function simplifiedGeoJsonTrackToLastHeading(geojson){
+    var lastIndex = geojson.features[0].geometry.coordinates.length - 1
+    var lastPoint = geojson.features[0].geometry.coordinates[lastIndex]
+    var secondLastPoint = geojson.features[0].geometry.coordinates[lastIndex - 1]
+
+    var point1 = turf.point(lastPoint);
+    var point2 = turf.point(secondLastPoint);
+
+    var bearing = turf.bearing(point2, point1);
+    return bearing
+  }
+
+  function toSimplifiedGeoJson(message){
+    var obj = {
+      'type': 'FeatureCollection',
+        'crs': {
+          'type': 'name',
+          'properties': {
+            'name': 'EPSG:3857',
+          },
+        },
+        'features': [
+          {
+            'type': 'Feature',
+            'geometry': message.simplified.geometry
+          }]
+    }
+    return obj
+  }
+
+
+  // Set up the map. In this example we're using Leaflet. You can use OpenLayers, Google Maps, Mapbox, D3, ArcGis, or any other carto library you want.
+  // We're just subscribing to data here and we can plot it as GeoJson, WKT, SVG, or whatever else we want. Converting the data for a front end library is up to the developer. 
+  var mymap = L.map('mapid').setView([-36.827308, 174.886144], 13);
+  L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoiandlaXNiYXVtODkiLCJhIjoiY2s2dmxkeHVsMDM1MjNlbWhjcWJ2bGYzZyJ9.gHaMu1bLXgouNFs_qjlMhg', {
+    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+    maxZoom: 18,
+    id: 'mapbox/streets-v11',
+    tileSize: 512,
+    zoomOffset: -1,
+    accessToken: 'your.mapbox.access.token'
+  }).addTo(mymap);
+
+  // Now that the map is set up, let's connect to the race!
+  var ws = new WebSocket('ws://localhost:8080/')
+  ws.onopen = function() {
+    // This tells the server that we want to subscribe to updates for race with id:'blah'.
+    ws.send(JSON.stringify({type:'consumer', id:raceId}))
+  };
+  
+  ws.onmessage = function (evt) { 
+    var received_msg = JSON.parse(evt.data)
+    if(received_msg.type === 'ping'){
+      let deviceId = received_msg.deviceId
+      let json = toSimplifiedGeoJson(received_msg)
+      let heading = simplifiedGeoJsonTrackToLastHeading(json)
+
+      //console.log(received_msg)
+      try{
+        mymap.removeLayer(deviceIdsToLayers[deviceId])
+        mymap.removeLayer(deviceIdsToBoatMarkers[deviceId])
+      }catch(e){
+       
+      }
+      var boatMarker = L.boatMarker([received_msg.content.lat, received_msg.content.lon], {
+          color: "#f1c40f", 	// color of the boat
+        idleCircle: false	// if set to true, the icon will draw a circle if
+                  // boatspeed == 0 and the ship-shape if speed > 0
+      });
+
+      boatMarker.setHeading(heading);
+      boatMarker.addTo(mymap)
+      let oldLayer = L.geoJSON(json)
+      oldLayer.addTo(mymap);
+      deviceIdsToLayers[deviceId] = oldLayer
+      deviceIdsToBoatMarkers[deviceId] = boatMarker
+     
+    }
+  //  console.log(received_msg)
+  };
+
+
+</script>
+
+
+</body>
+</html>
