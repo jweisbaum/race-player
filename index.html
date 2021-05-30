@@ -1,14 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <!-- Turf for GIS calculations -->
+  <script src='https://unpkg.com/@turf/turf@6.3.0/turf.min.js'></script>
+
+  <!-- Leaflet for mapping -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
   integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
   crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
   integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
   crossorigin=""></script>
-  <script src='https://unpkg.com/@turf/turf@6.3.0/turf.min.js'></script>
+  <!-- Leaflet plugins -->
   <script src="https://unpkg.com/leaflet.boatmarker/leaflet.boatmarker.min.js"></script>
+  <script src="./leaflet.hotline.min.js"></script>
+  
 
   <style>
       body {
@@ -23,11 +29,28 @@
           padding: 0;
           z-index: 0;
         }
+
+        #syrf_logo {
+          position: absolute;
+          top: 0px;
+          right: 0px;
+          margin-right:1%;
+          margin-top:1%;
+        }
   </style>
   
 </head>
 <body>
 <div id="mapid"></div>
+<div id="syrf_logo"><a href="https://syrf.io"><svg xmlns="http://www.w3.org/2000/svg" width="131" height="40" viewBox="0 0 131 40">
+  <g fill="none" fill-rule="evenodd">
+    <path fill="#DC6E1E" d="M115.3717498 0l-2.9520538.72752891L98.295423 35.7886813c4.71783212.9637641 10.4714151.7159014 17.260749-.7435881L115.3717498 0z"></path>
+    <path fill="#7ACBF4" d="M115.3744799 0c10.2958853 7.42686456 15.443828 15.1184356 15.443828 23.0747131C130.1124245 30.001356 125.0194658 35.6431183 115.539432 40l-.1649521-40z"></path>
+    <path fill="#348CCE" d="M115.3744799 2.90909091l.1320327 28.54545459c4.3702197-1.1945251 7.5361025-2.5624393 9.4976483-4.1037425l-9.629681-24.44171209z"></path>
+    <path fill="#4D7598" d="M115.4291172 2.90909091l-9.13924205 29.99999999c3.77736535-.3859047 6.86402135-.8838134 9.25996795-1.4937262.0231238-4.0679515-.0171181-13.5700428-.1207259-28.50627379z"></path>
+    <path fill="#FFF" d="M83.9149679 3.81818182H103.42611l-1.933332 5.02623569H87.9739012l-.9573566 6.66482319H98.295423l-1.5568424 5.2200234H86.2168657l-1.8380291 11.9980086h-5.3966249l4.9327562-28.90909088zm-28.1195028 0h9.6298946c7.8156511-.37804706 11.8296533 2.34570199 12.0420064 8.17124718 0 3.7656254-2.5692227 6.9031642-7.7076679 9.4126164l3.7973408 11.3252273h-5.6849628l-3.396432-10.8307292H57.677522l-1.8820569 10.8307292H50.680854l5.1146111-28.90909088zm2.3685434 13.64403868h7.4041475c2.0423006 0 6.1775581-.9072297 6.1775581-4.7795921 0-2.581575-1.1983081-3.93299748-3.5949244-4.05426739h-8.226321l-1.7604602 8.83385949zM26.5402942 3.81818182h6.1836822l4.9191715 12.61221588 9.1425664-12.61221588h7.0611509L40.1935797 20.8158144l-2.0595319 11.9114583h-5.8787329l2.0066567-11.9114583-7.7216774-16.99763258zm-.9298991 4.48290366c-2.1554465 1.92607042-2.3601921 2.14893442-3.8665717 3.63522202-2.4508691-2.51996722-5.1639523-3.30794649-7.3711707-3.30794649-3.033241 0-4.54986146.9932535-4.54986146 2.97976049-.11665735 1.3049515 1.07133086 2.3700575 3.56396456 3.1953179 3.7389506 1.2378907 10.2994894 2.6708673 10.4032454 9.0577091 0 5.1280188-2.6667204 9.6228118-11.6451437 9.6097061-4.61758722-.0477677-8.61735741-2.0214294-11.99931056-5.9209852l4.46495172-3.2984942c2.23349523 2.6433026 4.80673763 3.9649539 7.71972724 3.9649539 4.3694843 0 6.0574466-2.0050713 6.0574466-3.5338164 0-3.0022888-1.8178697-2.7166188-7.9128516-5.3276088-6.0949819-2.6109899-6.24394534-5.4297695-6.24394534-7.4185964 0-1.98882684.45509846-8.24386172 10.14177714-8.24386172 6.1294987-.05717112 9.0904198 2.35571561 11.2377424 4.6086397z"></path>
+  </g>
+</svg></a></div>
 <script>
   // Get the race id that you want to subscribe to from the url parameters.
   const deliminator = 'raceid='
@@ -35,6 +58,8 @@
   const raceId = queryString.split(deliminator)[1].split('/')[0]
   const deviceIdsToLayers = {}
   const deviceIdsToBoatMarkers = {}
+  var legs = []
+  var course = []
 
   console.log(raceId)
 
@@ -99,12 +124,23 @@
     return obj
   }
 
+  function simulateThirdParameter(geojson){
+    
+    let coords = []
+    let index = 0
+    geojson.features[0].geometry.coordinates.forEach(point => {
+      let p = [point[1], point[0], index%360]
+      index += 10
+      coords.push(p)
+    })
+    return coords
+  }
 
   // Set up the map. In this example we're using Leaflet. You can use OpenLayers, Google Maps, Mapbox, D3, ArcGis, or any other carto library you want.
   // We're just subscribing to data here and we can plot it as GeoJson, WKT, SVG, or whatever else we want. Converting the data for a front end library is up to the developer. 
   var mymap = L.map('mapid').setView([-36.827308, 174.886144], 13);
   L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoiandlaXNiYXVtODkiLCJhIjoiY2s2dmxkeHVsMDM1MjNlbWhjcWJ2bGYzZyJ9.gHaMu1bLXgouNFs_qjlMhg', {
-    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+    attribution: '<a href="https://www.github.com/sailing-yacht-research-foundation"><img src="https://syrf.io/wp-content/themes/syrf/assets/svg/icon-github.svg"></img></a>',
     maxZoom: 18,
     id: 'mapbox/streets-v11',
     tileSize: 512,
@@ -121,18 +157,51 @@
   
   ws.onmessage = function (evt) { 
     var received_msg = JSON.parse(evt.data)
+    // if(received_msg.type === 'legs'){
+    //   legs.forEach(legLayer => {
+    //     mymap.removeLayer(legLayer)
+    //   })
+    //   legs = []
+
+    //   received_msg.leg_geometry.forEach(leg => {
+        
+    //     legs.push(L.geoJSON(leg))
+
+    //   })
+
+    //   legs.forEach(legLayer => {
+    //     legLayer.addTo(mymap)
+    //   })
+    // }
+    if(received_msg.type === 'course'){
+      course.forEach(courseLayer => {
+        mymap.removeLayer(courseLayer)
+      })
+      course = []
+      received_msg.course_geometry.forEach(courseObject => {
+        course.push(L.geoJSON(courseObject))
+      })
+
+      course.forEach(courseLayer => {
+        courseLayer.addTo(mymap)
+      })
+    }
+
     if(received_msg.type === 'ping'){
       let deviceId = received_msg.deviceId
       let json = toSimplifiedGeoJson(received_msg)
       let heading = simplifiedGeoJsonTrackToLastHeading(json)
 
       //console.log(received_msg)
-      try{
-        mymap.removeLayer(deviceIdsToLayers[deviceId])
-        mymap.removeLayer(deviceIdsToBoatMarkers[deviceId])
-      }catch(e){
-       
-      }
+      Object.keys(deviceIdsToLayers).forEach(k => {
+        try{
+        mymap.removeLayer(deviceIdsToLayers[k])
+        mymap.removeLayer(deviceIdsToBoatMarkers[k])
+        }catch(e){
+        
+        }
+      })
+     
       var boatMarker = L.boatMarker([received_msg.content.lat, received_msg.content.lon], {
           color: "#f1c40f", 	// color of the boat
         idleCircle: false	// if set to true, the icon will draw a circle if
@@ -140,11 +209,30 @@
       });
 
       boatMarker.setHeading(heading);
-      boatMarker.addTo(mymap)
-      let oldLayer = L.geoJSON(json)
-      oldLayer.addTo(mymap);
-      deviceIdsToLayers[deviceId] = oldLayer
+      
+      
+      let coords = simulateThirdParameter(json)
+      var hotlineLayer = L.hotline(coords, {
+			min: 0,
+			max: 360,
+			palette: {
+				0.0: '#00ff00',
+				0.5: '#0000ff',
+				1.0: '#ff0000'
+			},
+        weight: 5,
+        outlineColor: '#000000',
+        outlineWidth: 1
+      });
+     
+      deviceIdsToLayers[deviceId] = hotlineLayer
       deviceIdsToBoatMarkers[deviceId] = boatMarker
+
+      Object.keys(deviceIdsToLayers).forEach(k => {
+        deviceIdsToLayers[k].addTo(mymap)
+        deviceIdsToBoatMarkers[k].addTo(mymap)
+   
+      })
      
     }
   //  console.log(received_msg)
